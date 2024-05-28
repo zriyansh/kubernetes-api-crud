@@ -38,3 +38,9 @@ http://127.0.0.1:8000/authen/signup/
 
 ### DELETE
 http://127.0.0.1:8000/deploy/apps/2/
+
+
+## Pod Logs in SigNoz
+
+![](./media/logs-1.png)
+
