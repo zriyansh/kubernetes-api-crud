@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 import os
-
+import redis
 from dotenv import load_dotenv
 
 
@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'deploy',
     'logs',
+    'channels',
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
@@ -82,7 +83,18 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'k8sapi.wsgi.application'
+# WSGI_APPLICATION = 'k8sapi.wsgi.application'
+ASGI_APPLICATION = 'k8sapi.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+        },
+    },
+}
+
 
 
 # Database
@@ -185,4 +197,16 @@ SIMPLE_JWT = {
      'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
      'ROTATE_REFRESH_TOKENS': True,
      'BLACKLIST_AFTER_ROTATION': True
+}
+
+# settings.py
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+
+CELERY_BEAT_SCHEDULE = {
+    'check-stuck-deployments-every-5-minutes': {
+        'task': 'k8sapi.tasks.check_stuck_deployments',
+        'schedule': 3.0,  # 3 sec
+    },
 }

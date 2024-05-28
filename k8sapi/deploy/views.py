@@ -13,8 +13,10 @@ from .serializers import DeploymentSerializer
 import subprocess
 import logging
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 class DeployView(views.APIView):
-    # permission_classes = (IsAuthenticated,)
     permission_classes = (AllowAny,)
 
     def post(self, request, *args, **kwargs):
@@ -29,7 +31,6 @@ class DeployView(views.APIView):
         try:
             config.load_kube_config()
 
-            # Create a namespace
             v1 = client.CoreV1Api()
             namespace_body = client.V1Namespace(
                 metadata=client.V1ObjectMeta(name=namespace)
@@ -38,7 +39,7 @@ class DeployView(views.APIView):
                 v1.create_namespace(body=namespace_body)
             except client.exceptions.ApiException as e:
                 if e.status == 409:
-                    # means if Namespace already exists
+                    #  already exists
                     pass
                 else:
                     raise
@@ -51,7 +52,7 @@ class DeployView(views.APIView):
                     "details": result.stderr
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # here, update Helm repositories
+            # Update helm repo
             helm_repo_update_cmd = ['helm', 'repo', 'update']
             result = subprocess.run(helm_repo_update_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if result.returncode != 0:
@@ -60,7 +61,7 @@ class DeployView(views.APIView):
                     "details": result.stderr
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # chart deploy
+            # deployment
             helm_install_cmd = [
                 'helm', 'install', application_name, f'examples/{chart_name}',
                 '--namespace', namespace,
@@ -73,6 +74,9 @@ class DeployView(views.APIView):
                     "details": result.stderr
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+            self.broadcast_status(namespace, application_name, "In_Progress")
+
             health_status = self.check_health(namespace, application_name)
 
             deployment = Deployment.objects.create(
@@ -81,16 +85,17 @@ class DeployView(views.APIView):
                 deployed_at=timezone.now(),
                 status=health_status
             )
-            serializer = DeploymentSerializer(deployment)
 
+            self.broadcast_status(namespace, application_name, health_status)
+
+            serializer = DeploymentSerializer(deployment)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def check_health(self, namespace, application_name):
-        
-        # some loic
+
         try:
             config.load_kube_config()
             v1 = client.CoreV1Api()
@@ -98,10 +103,21 @@ class DeployView(views.APIView):
             for pod in pods.items:
                 if application_name in pod.metadata.name:
                     if pod.status.phase != 'Running':
-                        return 'Unhealthy'
-            return 'Healthy'
+                        return 'Error'
+            return 'Running'
         except Exception as e:
-            return 'Unhealthy'
+            return 'Error'
+
+    def broadcast_status(self, namespace, application_name, status):
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "deployments",
+            {
+                "type": "send_status_update",
+                "id": application_name,
+                "status": status,
+            }
+        )
 
 
 class DeploymentListView(generics.ListAPIView):
@@ -169,7 +185,7 @@ class DeploymentDeleteView(views.APIView):
                 # Deleting the deployment
                 apps_v1.delete_namespaced_deployment(name=dep.metadata.name, namespace=namespace)
 
-                # Deleting the pods associated with the deployment
+                # Deleting the pods with the deployment
                 pods = v1.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
                 for pod in pods.items:
                     logger.info(f"Deleting pod '{pod.metadata.name}' in namespace '{namespace}'")

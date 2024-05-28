@@ -1,0 +1,8 @@
+django-cors-headers
+helm
+channels
+celery
+redis
+channels 
+channels_redis
+asgi_redis
