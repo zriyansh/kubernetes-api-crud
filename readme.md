@@ -24,7 +24,7 @@ Access the app at - http://localhost:3000/applications
 
 ![](./media/logs-1.png)
 
-![](./media/ui.png)
+![](./media/ui2.png)
 
 
 ## APIS
