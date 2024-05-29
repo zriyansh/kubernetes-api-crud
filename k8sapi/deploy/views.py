@@ -22,10 +22,10 @@ class DeployView(views.APIView):
     def post(self, request, *args, **kwargs):
         namespace = request.data.get('namespace')
         application_name = request.data.get('application_name')
-        chart_name = request.data.get('chart_name')
-        chart_version = request.data.get('chart_version')
+        # chart_name = request.data.get('chart_name')
+        chart_link = request.data.get('chart_link')
 
-        if not all([namespace, application_name, chart_name]):
+        if not all([namespace, application_name, chart_link]):
             return Response({"error": "All fields are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -44,13 +44,13 @@ class DeployView(views.APIView):
                 else:
                     raise
 
-            helm_repo_add_cmd = ['helm', 'repo', 'add', 'examples', 'https://helm.github.io/examples']
-            result = subprocess.run(helm_repo_add_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if result.returncode != 0:
-                return Response({
-                    "error": "Helm repo add command failed",
-                    "details": result.stderr
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # helm_repo_add_cmd = ['helm', 'repo', 'add', 'examples', chart_link]
+            # result = subprocess.run(helm_repo_add_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # if result.returncode != 0:
+            #     return Response({
+            #         "error": "Helm repo add command failed",
+            #         "details": result.stderr
+            #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Update helm repo
             helm_repo_update_cmd = ['helm', 'repo', 'update']
@@ -61,35 +61,38 @@ class DeployView(views.APIView):
                     "details": result.stderr
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+            
+            if Deployment.objects.filter(namespace=namespace).exists():
+                return Response({'error': 'Namespace already exists, make a unique one'})
+            else: 
             # deployment
-            helm_install_cmd = [
-                'helm', 'install', application_name, f'examples/{chart_name}',
-                '--namespace', namespace,
-                # '--version', chart_version
-            ]
-            result = subprocess.run(helm_install_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if result.returncode != 0:
-                return Response({
-                    "error": "Helm install command failed",
-                    "details": result.stderr
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                helm_install_cmd = [
+                    'helm', 'install', application_name, chart_link,
+                    '--namespace', namespace,
+                    # '--version', chart_version
+                ]
+                result = subprocess.run(helm_install_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if result.returncode != 0:
+                    return Response({
+                        "error": "Helm install command failed",
+                        "details": result.stderr
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+                self.broadcast_status(namespace, application_name, "In_Progress")
 
+                health_status = self.check_health(namespace, application_name)
 
-            self.broadcast_status(namespace, application_name, "In_Progress")
+                deployment = Deployment.objects.create(
+                    namespace=namespace,
+                    application_name=application_name,
+                    deployed_at=timezone.now(),
+                    status=health_status
+                )
 
-            health_status = self.check_health(namespace, application_name)
+                self.broadcast_status(namespace, application_name, health_status)
 
-            deployment = Deployment.objects.create(
-                namespace=namespace,
-                application_name=application_name,
-                deployed_at=timezone.now(),
-                status=health_status
-            )
-
-            self.broadcast_status(namespace, application_name, health_status)
-
-            serializer = DeploymentSerializer(deployment)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+                serializer = DeploymentSerializer(deployment)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -118,7 +121,6 @@ class DeployView(views.APIView):
                 "status": status,
             }
         )
-
 
 class DeploymentListView(generics.ListAPIView):
     queryset = Deployment.objects.all()

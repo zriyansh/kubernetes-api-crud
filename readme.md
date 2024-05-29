@@ -3,6 +3,9 @@
 Database - Postgres
 Logs APM - SigNoz (attached screenshot above)
 
+Access the app at - http://localhost:3000/applications
+
+
 
 ## Commands to run
 
@@ -65,3 +68,16 @@ http://127.0.0.1:8000/authen/signup/
 ### DELETE
 http://127.0.0.1:8000/deploy/apps/<int:id>/
 
+
+
+
+.env file sample
+
+```
+DATABASE_NAME=scoutflo
+DATABASE_USER=postgres  
+DATABASE_PASSWORD=postgres
+DATABASE_HOST=localhost
+DATABASE_HOST=my-release-psql-postgresql
+DATABASE_PORT=5432 
+```

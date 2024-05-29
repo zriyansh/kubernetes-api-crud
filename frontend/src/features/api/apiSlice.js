@@ -18,6 +18,10 @@ export const apiSlice = createApi({
         body: credentials,
       }),
     }),
+    deployApplications: builder.mutation({
+      query: () => '/deploy/',
+      method: 'POST'
+    }),
     fetchApplications: builder.query({
       query: () => '/deploy/deploy-list/',
     }),
@@ -33,6 +37,7 @@ export const apiSlice = createApi({
 export const {
   useSignUpMutation,
   useLoginMutation,
+  useDeployApplicationsMutation,
   useFetchApplicationsQuery,
   useDeleteApplicationMutation,
 } = apiSlice;
