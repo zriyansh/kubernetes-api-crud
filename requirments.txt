@@ -6,3 +6,6 @@ redis
 channels 
 channels_redis
 asgi_redis
+aiohttp
+asyncio
+kubernetes_asyncio

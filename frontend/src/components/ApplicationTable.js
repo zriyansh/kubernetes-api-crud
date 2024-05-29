@@ -34,13 +34,15 @@ import axios from 'axios';
 const ApplicationTable = () => {
   const { data: applications, isLoading, isError, error, refetch } = useFetchApplicationsQuery();
   const [deleteApplication] = useDeleteApplicationMutation();
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
+  const { isOpen: isLogsOpen, onOpen: onLogsOpen, onClose: onLogsClose } = useDisclosure();
   const [selectedApp, setSelectedApp] = useState(null);
   const [statusUpdates, setStatusUpdates] = useState({});
   const [namespace, setNamespace] = useState('');
   const [applicationName, setApplicationName] = useState('');
   const [chartLink, setChartLink] = useState('');
   const [formError, setFormError] = useState('');
+  const [logs, setLogs] = useState('');
 
   useEffect(() => {
     const socket = new WebSocket('ws://127.0.0.1:8000/ws/deployments/');
@@ -83,12 +85,12 @@ const ApplicationTable = () => {
     if (selectedApp) {
       try {
         await deleteApplication(selectedApp.id).unwrap();
-        window.location.reload(); 
+        window.location.reload();
       } catch (err) {
         console.error('Failed to delete the application:', err);
       } finally {
         setSelectedApp(null);
-        onClose();
+        onDeleteClose();
       }
     }
   };
@@ -116,43 +118,64 @@ const ApplicationTable = () => {
     }
   };
 
+  const handleViewLogs = async (appId) => {
+    try {
+      const response = await axios.get(`http://127.0.0.1:8000/deploy/apps/${appId}/logs/`);
+      setLogs(response.data.logs);
+      onLogsOpen();
+    } catch (error) {
+      console.error('Failed to fetch logs:', error);
+    }
+  };
+
+  const parseLogs = (logString) => {
+    const logLines = logString.split('\n').filter((line) => line.trim() !== '');
+    return logLines.map((line, index) => {
+      const [timestamp, ...rest] = line.split('"');
+      const message = rest.join(' ');
+      return { timestamp, message, key: index };
+    });
+  };
+
+  const parsedLogs = parseLogs(logs);
+
   return (
     <Box p={9}>
       <VStack spacing={4} mb={6}>
-      <Container maxW='550px'>
-        <FormControl id="namespace">
-          <FormLabel my={1}>Namespace (unique)</FormLabel>
-          <Input
-            type="text"
-            value={namespace}
-            onChange={(e) => setNamespace(e.target.value)}
-          />
-        </FormControl>
-        <FormControl id="applicationName">
-          <FormLabel my={1}>Application Name</FormLabel>
-          <Input
-            type="text"
-            value={applicationName}
-            onChange={(e) => setApplicationName(e.target.value)}
-          />
-        </FormControl>
-        <FormControl id="chartLink">
-          <FormLabel my={1}>Chart Link</FormLabel>
-          <Input
-            type="text"
-            value={chartLink}
-            onChange={(e) => setChartLink(e.target.value)}
-          />
-        </FormControl>
-        {formError && (
-          <Text color="red.500">{formError}</Text>
-        )}
-        <Button colorScheme="teal" my={3} onClick={handleDeploy}>
-          Deploy
-        </Button>
+        <Container maxW='550px'>
+          <FormControl id="namespace">
+            <FormLabel my={1}>Namespace (unique)</FormLabel>
+            <Input
+              type="text"
+              value={namespace}
+              onChange={(e) => setNamespace(e.target.value)}
+            />
+          </FormControl>
+          <FormControl id="applicationName">
+            <FormLabel my={1}>Application Name</FormLabel>
+            <Input
+              type="text"
+              value={applicationName}
+              onChange={(e) => setApplicationName(e.target.value)}
+            />
+          </FormControl>
+          <FormControl id="chartLink">
+            <FormLabel my={1}>Chart Link</FormLabel>
+            <Input
+              type="text"
+              value={chartLink}
+              onChange={(e) => setChartLink(e.target.value)}
+            />
+          </FormControl>
+          {formError && (
+            <Text color="red.500">{formError}</Text>
+          )}
+          <Button colorScheme="teal" my={3} onClick={handleDeploy}>
+            Deploy
+          </Button>
         </Container>
       </VStack>
-      
+
       <Table variant="simple">
         <Thead>
           <Tr>
@@ -177,10 +200,17 @@ const ApplicationTable = () => {
                   colorScheme="red"
                   onClick={() => {
                     setSelectedApp(app);
-                    onOpen();
+                    onDeleteOpen();
                   }}
                 >
                   Delete
+                </Button>
+                <Button
+                  colorScheme="blue"
+                  onClick={() => handleViewLogs(app.id)}
+                  ml={3}
+                >
+                  View Logs
                 </Button>
               </Td>
             </Tr>
@@ -188,7 +218,7 @@ const ApplicationTable = () => {
         </Tbody>
       </Table>
 
-      <Modal isOpen={isOpen} onClose={onClose}>
+      <Modal isOpen={isDeleteOpen} onClose={onDeleteClose}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Confirm Deletion</ModalHeader>
@@ -198,11 +228,42 @@ const ApplicationTable = () => {
             <strong>{selectedApp?.application_name}</strong>?
           </ModalBody>
           <ModalFooter>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={onDeleteClose}>
               Cancel
             </Button>
             <Button colorScheme="red" onClick={handleDelete} ml={3}>
               Delete
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={isLogsOpen} size = {30} onClose={onLogsClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Logs</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Table variant="simple">
+              <Thead>
+                <Tr>
+                  <Th>Timestamp</Th>
+                  <Th>Log Message</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {parsedLogs.map((log) => (
+                  <Tr key={log.key}>
+                    <Td>{log.timestamp}</Td>
+                    <Td>{log.message}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" onClick={onLogsClose}>
+              Close
             </Button>
           </ModalFooter>
         </ModalContent>
