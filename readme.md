@@ -5,6 +5,15 @@ Logs APM - SigNoz (attached screenshot above)
 
 Access the app at - http://localhost:3000/applications
 
+## Run Frontend
+1. `yarn install`
+2. `yarn start`
+
+## Run backend
+1. `celery -A k8sapi worker`
+2. `redis-server`
+3. `python manage.py runserver`
+4. python manage.py migrate/makemigrations (optional, if you are setting it up for the first time)
 
 
 ## Commands to run
